@@ -1,0 +1,17 @@
+# Install PyTorch FIRST (see README), then: pip install -r requirements.txt
+# torchmcubes is installed separately AFTER this (see README step 4).
+# Versions are intentionally not pinned so this works on Python 3.11 through 3.14.
+omegaconf
+einops
+Pillow
+numpy
+transformers
+huggingface-hub
+trimesh
+scipy
+fast-simplification
+rembg[cpu]
+onnxruntime
+fastapi
+uvicorn
+python-multipart

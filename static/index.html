@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photo to 3D - WORKING VERSION</title>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/static/vendor/three/build/three.module.js"
+        }
+      }
+    </script>
+
+    <style>
+      :root {
+        --bench: #dde3e0;
+        --panel: #f7f8f6;
+        --ink: #1b2422;
+        --muted: #59ff00;
+        --line: #ccc4c3;
+        --accent: #0e6b63;
+        --accent-ink: #fff;
+        --stage: #c8ff00;
+        --warn: #a4372a;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bench: #151b1a;
+          --panel: #1f2826;
+          --ink: #e8eeeb;
+          --muted: #93a39e;
+          --line: #34423f;
+          --accent: #bbd71a;
+          --accent-ink: #06211e;
+          --stage: #0e84be;
+          --warn: #ff8a78;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bench);
+        color: var(--ink);
+        font:
+          16px/1.5 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: minmax(300px, 380px) 1fr;
+        gap: 16px;
+        height: 100%;
+        padding: 16px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .side {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow: auto;
+      }
+
+      h1 {
+        font-size: 1.6rem;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+
+      .sub {
+        color: var(--muted);
+        margin: 4px 0 0;
+        font-size: 0.95rem;
+      }
+
+      .status {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .status b {
+        color: var(--ink);
+      }
+
+      .modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .modes button {
+        padding: 12px 8px;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .modes button + button {
+        border-left: 1px solid var(--line);
+      }
+
+      .modes button[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+
+      .pane[hidden] {
+        display: none;
+      }
+
+      .frame {
+        aspect-ratio: 4/3;
+        background: var(--stage);
+        border-radius: 10px;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        color: #050404;
+        text-align: center;
+        font-size: 0.99rem;
+        position: relative;
+      }
+
+      .frame video,
+      .frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .drop {
+        border: 2px dashed var(--line);
+        cursor: pointer;
+      }
+
+      .drop.over {
+        border-color: var(--accent);
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 11px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: center;
+        text-decoration: none;
+      }
+
+      .btn.primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: var(--accent);
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      label.field {
+        display: grid;
+        gap: 4px;
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      select {
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font: inherit;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin: 0;
+      }
+
+      .msg {
+        min-height: 1.5em;
+        font-size: 0.95rem;
+      }
+
+      .msg.err {
+        color: var(--warn);
+      }
+
+      .result[hidden] {
+        display: none;
+      }
+
+      .result dl {
+        display: flex;
+        gap: 20px;
+        margin: 0 0 4px;
+      }
+
+      .result dt {
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .result dd {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.15rem;
+      }
+
+      /* ======================================================
+         LOADING PANEL
+         ====================================================== */
+
+      .loading {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+      }
+
+      .loading-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .loading-title {
+        font-weight: 700;
+        font-size: 0.98rem;
+      }
+
+      .loading-percent {
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .progress-track {
+        height: 9px;
+        width: 100%;
+        background: var(--line);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        border-radius: inherit;
+        transition: width 0.5s ease;
+      }
+
+      .loading-stage {
+        margin-top: 9px;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .loading-message {
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 2px;
+      }
+
+      .loading-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .loading-stat {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+
+      .loading-stat-label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+
+      .loading-stat-value {
+        display: block;
+        font-weight: 700;
+        font-size: 0.92rem;
+      }
+
+      /* ======================================================
+         3D VIEWER
+         ====================================================== */
+
+      .stage {
+        position: relative;
+        background: var(--stage);
+        border-radius: 14px;
+        overflow: hidden;
+        min-height: 340px;
+      }
+
+      #view {
+        position: absolute;
+        inset: 0;
+      }
+
+      .tools {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .tools button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #3d4d49;
+        background: #1e2725cc;
+        color: #e8eeeb;
+        font: inherit;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .tools button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: var(--accent);
+      }
+
+      .empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #8fa19c;
+        text-align: center;
+        padding: 24px;
+        pointer-events: none;
+      }
+
+      @media (max-width: 800px) {
+        .app {
+          grid-template-columns: 1fr;
+          height: auto;
+          min-height: 100%;
+        }
+
+        .stage {
+          min-height: 500px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <aside class="side">
+        <div>
+          <h1>Photo to 3D</h1>
+
+          <p class="sub">
+            Turn a picture of an object into a 3D model. Runs locally.
+          </p>
+
+          <p class="status" id="status">Checking…</p>
+        </div>
+
+        <!-- MODE TABS -->
+
+        <div class="modes" role="tablist">
+          <button role="tab" id="tab-scan" aria-selected="true">Scan</button>
+
+          <button role="tab" id="tab-upload" aria-selected="false">
+            Upload
+          </button>
+        </div>
+
+        <!-- SCAN -->
+
+        <section class="pane" id="pane-scan">
+          <div class="frame" id="scanFrame">
+            <video id="cam" playsinline muted hidden></video>
+
+            <img id="shot" hidden />
+
+            <span id="camNote"> Camera is off </span>
+          </div>
+
+          <div class="row">
+            <button class="btn" id="camBtn">Start camera</button>
+
+            <button class="btn primary" id="snapBtn" disabled>Capture</button>
+          </div>
+        </section>
+
+        <!-- UPLOAD -->
+
+        <section class="pane" id="pane-upload" hidden>
+          <div class="frame drop" id="drop">
+            <span id="upNote"> Drop or click to choose </span>
+
+            <img id="upPreview" style="display: none" />
+
+            <input type="file" id="file" accept="image/*" hidden />
+          </div>
+
+          <button class="btn primary" id="browseBtn">Browse for Image</button>
+        </section>
+
+        <!-- QUALITY -->
+
+        <label class="field">
+          Quality
+
+          <select id="quality">
+            <option value="light">Light (10k tri)</option>
+
+            <option value="balanced" selected>Balanced (40k tri)</option>
+
+            <option value="detailed">Detailed (120k tri)</option>
+          </select>
+        </label>
+
+        <!-- GENERATE -->
+
+        <button class="btn primary" id="go" disabled>Make 3D model</button>
+
+        <!-- LOADING -->
+
+        <div class="loading" id="loading" hidden>
+          <div class="loading-head">
+            <span class="loading-title" id="loadingTitle">
+              Generating 3D Model
+            </span>
+
+            <span class="loading-percent" id="loadingPercent"> 0% </span>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+
+          <div class="loading-stage" id="loadingStage">Starting...</div>
+
+          <div class="loading-message" id="loadingMessage">Preparing...</div>
+
+          <div class="loading-stats">
+            <div class="loading-stat">
+              <span class="loading-stat-label"> Elapsed </span>
+
+              <span class="loading-stat-value" id="elapsed"> 00:00 </span>
+            </div>
+
+            <div class="loading-stat">
+              <span class="loading-stat-label"> Estimated remaining </span>
+
+              <span class="loading-stat-value" id="eta"> Calculating... </span>
+            </div>
+          </div>
+        </div>
+
+        <p class="msg" id="msg"></p>
+
+        <!-- RESULT -->
+
+        <div class="result" id="result" hidden>
+          <dl>
+            <div>
+              <dt>Triangles</dt>
+
+              <dd id="rTri">-</dd>
+            </div>
+
+            <div>
+              <dt>Time</dt>
+
+              <dd id="rSec">-</dd>
+            </div>
+          </dl>
+
+          <div class="row">
+            <a class="btn primary" id="dlGlb" download="model.glb"> GLB </a>
+
+            <a class="btn" id="dlStl" download="model.stl"> STL </a>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 3D VIEW -->
+
+      <main class="stage">
+        <div id="view"></div>
+
+        <div class="tools">
+          <button id="wire" aria-pressed="false">Wireframe</button>
+
+          <button id="spin" aria-pressed="true">Rotate</button>
+        </div>
+
+        <div class="empty" id="empty">look here gng...</div>
+      </main>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+
+      import { GLTFLoader } from "/static/vendor/three/examples/jsm/loaders/GLTFLoader.js";
+
+      import { OrbitControls } from "/static/vendor/three/examples/jsm/controls/OrbitControls.js";
+
+      const $ = (id) => document.getElementById(id);
+
+      let blob;
+      let stream;
+      let current;
+      let progressTimer;
+
+      // ======================================================
+      // THREE.JS
+      // ======================================================
+
+      const host = $("view");
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+      });
+
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+      host.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+
+      scene.background = new THREE.Color("#1e2725");
+
+      const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 50);
+
+      camera.position.set(1.3, 0.9, 1.7);
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x445550, 1.6));
+
+      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+
+      sun.position.set(2, 3, 2);
+
+      scene.add(sun);
+
+      const grid = new THREE.GridHelper(3, 12, 0x3d4d49, 0x2a3633);
+
+      grid.position.y = -0.5;
+
+      scene.add(grid);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+
+      controls.enableDamping = true;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 1.5;
+
+      function resize() {
+        const w = host.clientWidth;
+
+        const h = host.clientHeight;
+
+        renderer.setSize(w, h);
+
+        camera.aspect = w / h;
+
+        camera.updateProjectionMatrix();
+      }
+
+      new ResizeObserver(resize).observe(host);
+
+      resize();
+
+      renderer.setAnimationLoop(() => {
+        controls.update();
+
+        renderer.render(scene, camera);
+      });
+
+      // ======================================================
+      // VIEWER CONTROLS
+      // ======================================================
+
+      $("wire").onclick = (e) => {
+        const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+
+        e.currentTarget.setAttribute("aria-pressed", on);
+
+        current?.traverse((o) => {
+          if (o.isMesh) {
+            o.material.wireframe = on;
+          }
+        });
+      };
+
+      $("spin").onclick = (e) => {
+        const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+
+        e.currentTarget.setAttribute("aria-pressed", on);
+
+        controls.autoRotate = on;
+      };
+
+      function showModel(url) {
+        new GLTFLoader().load(
+          url,
+
+          (gltf) => {
+            if (current) {
+              scene.remove(current);
+            }
+
+            current = gltf.scene;
+
+            current.traverse((o) => {
+              if (o.isMesh) {
+                o.material.vertexColors = true;
+
+                o.material.wireframe =
+                  $("wire").getAttribute("aria-pressed") === "true";
+
+                o.material.needsUpdate = true;
+              }
+            });
+
+            scene.add(current);
+
+            $("empty").hidden = true;
+          },
+
+          undefined,
+
+          (error) => {
+            console.error("GLB loading failed:", error);
+
+            setMsg("Model generated, but viewer failed to load it.", true);
+          },
+        );
+      }
+
+      // ======================================================
+      // MODE
+      // ======================================================
+
+      function setMode(mode) {
+        ["scan", "upload"].forEach((m) => {
+          $("tab-" + m).setAttribute("aria-selected", m === mode);
+
+          $("pane-" + m).hidden = m !== mode;
+        });
+
+        if (mode === "upload") {
+          stopCam();
+        }
+
+        blob = null;
+
+        $("go").disabled = true;
+
+        $("shot").hidden = true;
+
+        $("upPreview").style.display = "none";
+
+        $("upNote").style.display = "block";
+      }
+
+      $("tab-scan").onclick = () => setMode("scan");
+
+      $("tab-upload").onclick = () => setMode("upload");
+
+      // ======================================================
+      // CAMERA
+      // ======================================================
+
+      function stopCam() {
+        stream?.getTracks().forEach((t) => t.stop());
+
+        stream = null;
+
+        $("cam").hidden = true;
+
+        $("camBtn").textContent = "Start camera";
+
+        $("snapBtn").disabled = true;
+      }
+
+      $("camBtn").onclick = async () => {
+        if (stream) {
+          stopCam();
+
+          return;
+        }
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: "environment",
+
+              width: {
+                ideal: 1280,
+              },
+            },
+          });
+        } catch {
+          setMsg("Camera unavailable", true);
+
+          return;
+        }
+
+        const v = $("cam");
+
+        v.srcObject = stream;
+
+        await v.play();
+
+        v.hidden = false;
+
+        $("camBtn").textContent = "Stop";
+
+        $("snapBtn").disabled = false;
+
+        setMsg("");
+      };
+
+      $("snapBtn").onclick = () => {
+        const v = $("cam");
+
+        const c = document.createElement("canvas");
+
+        c.width = v.videoWidth;
+
+        c.height = v.videoHeight;
+
+        c.getContext("2d").drawImage(v, 0, 0);
+
+        c.toBlob(
+          (b) => {
+            blob = b;
+
+            $("shot").src = URL.createObjectURL(b);
+
+            $("shot").hidden = false;
+
+            $("cam").hidden = true;
+
+            $("go").disabled = false;
+
+            setMsg("Ready");
+
+            stopCam();
+          },
+
+          "image/jpeg",
+
+          0.92,
+        );
+      };
+
+      // ======================================================
+      // UPLOAD
+      // ======================================================
+
+      function takeFile(f) {
+        if (!f || !f.type.startsWith("image/")) {
+          setMsg("Invalid image", true);
+
+          return;
+        }
+
+        blob = f;
+
+        $("upPreview").src = URL.createObjectURL(f);
+
+        $("upPreview").style.display = "block";
+
+        $("upNote").style.display = "none";
+
+        $("go").disabled = false;
+
+        setMsg("Ready");
+      }
+
+      $("file").onchange = (e) => takeFile(e.target.files[0]);
+
+      $("browseBtn").onclick = () => $("file").click();
+
+      const drop = $("drop");
+
+      drop.onclick = () => $("file").click();
+
+      drop.ondragover = (e) => {
+        e.preventDefault();
+
+        drop.classList.add("over");
+      };
+
+      drop.ondragleave = () => drop.classList.remove("over");
+
+      drop.ondrop = (e) => {
+        e.preventDefault();
+
+        drop.classList.remove("over");
+
+        takeFile(e.dataTransfer.files[0]);
+      };
+
+      // ======================================================
+      // MESSAGE
+      // ======================================================
+
+      function setMsg(t, err = false) {
+        $("msg").textContent = t;
+
+        $("msg").classList.toggle("err", err);
+      }
+
+      // ======================================================
+      // TIME FORMAT
+      // ======================================================
+
+      function formatTime(seconds) {
+        seconds = Math.max(0, Math.round(Number(seconds) || 0));
+
+        const minutes = Math.floor(seconds / 60);
+
+        const secs = seconds % 60;
+
+        return (
+          String(minutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0")
+        );
+      }
+
+      // ======================================================
+      // PROGRESS UI
+      // ======================================================
+
+      function updateProgress(job) {
+        const progress = Math.max(0, Math.min(100, Number(job.progress) || 0));
+
+        $("progressBar").style.width = progress + "%";
+
+        $("loadingPercent").textContent = Math.round(progress) + "%";
+
+        $("loadingStage").textContent = job.stage || "Generating...";
+
+        $("loadingMessage").textContent = job.message || "Processing...";
+
+        $("elapsed").textContent = formatTime(job.elapsed);
+
+        if (job.eta !== null && job.eta !== undefined) {
+          $("eta").textContent = formatTime(job.eta) + " remaining";
+        } else {
+          $("eta").textContent = "Calculating...";
+        }
+      }
+
+      // ======================================================
+      // CLIENT-SIDE ETA
+      // ======================================================
+
+      let progressHistory = [];
+
+      function calculateETA(progress, elapsed) {
+        if (progress <= 0 || elapsed < 2) {
+          return null;
+        }
+
+        /*
+         * Do not estimate from the first few seconds.
+         * The first stages include model loading and can
+         * otherwise produce a wildly inaccurate ETA.
+         */
+
+        if (progress < 20) {
+          return null;
+        }
+
+        const estimatedTotal = elapsed * (100 / progress);
+
+        const remaining = estimatedTotal - elapsed;
+
+        if (!Number.isFinite(remaining)) {
+          return null;
+        }
+
+        return Math.max(0, Math.round(remaining));
+      }
+
+      // ======================================================
+      // POLL JOB
+      // ======================================================
+
+      async function monitorJob(jobId) {
+        progressHistory = [];
+
+        while (true) {
+          const r = await fetch("/api/progress/" + encodeURIComponent(jobId), {
+            cache: "no-store",
+          });
+
+          if (!r.ok) {
+            throw new Error("Unable to read generation progress.");
+          }
+
+          const job = await r.json();
+
+          let eta = job.eta;
+
+          if (eta === null || eta === undefined) {
+            eta = calculateETA(
+              Number(job.progress) || 0,
+
+              Number(job.elapsed) || 0,
+            );
+          }
+
+          updateProgress({
+            ...job,
+            eta,
+          });
+
+          if (job.status === "completed") {
+            return job.result;
+          }
+
+          if (job.status === "failed") {
+            throw new Error(job.error || job.message || "Generation failed.");
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+
+      // ======================================================
+      // GENERATE
+      // ======================================================
+
+      $("go").onclick = async () => {
+        if (!blob) {
+          return;
+        }
+
+        $("go").disabled = true;
+
+        $("result").hidden = true;
+
+        $("loading").hidden = false;
+
+        $("progressBar").style.width = "0%";
+
+        $("loadingPercent").textContent = "0%";
+
+        $("loadingStage").textContent = "Starting...";
+
+        $("loadingMessage").textContent = "Uploading image...";
+
+        $("elapsed").textContent = "00:00";
+
+        $("eta").textContent = "Calculating...";
+
+        setMsg("");
+
+        try {
+          const fd = new FormData();
+
+          fd.append("image", blob, "photo.jpg");
+
+          fd.append("quality", $("quality").value);
+
+          // ----------------------------------------------
+          // Start background job.
+          // ----------------------------------------------
+
+          const r = await fetch("/api/generate", {
+            method: "POST",
+            body: fd,
+          });
+
+          const d = await r.json();
+
+          if (!r.ok) {
+            throw new Error(d.detail || "Failed to start generation.");
+          }
+
+          if (!d.job_id) {
+            throw new Error("Server did not return a job ID.");
+          }
+
+          // ----------------------------------------------
+          // Monitor real job.
+          // ----------------------------------------------
+
+          const result = await monitorJob(d.job_id);
+
+          // ----------------------------------------------
+          // Show result.
+          // ----------------------------------------------
+
+          $("rTri").textContent = result.triangles.toLocaleString();
+
+          $("rSec").textContent = result.seconds + " s";
+
+          $("dlGlb").href = result.glb;
+
+          $("dlStl").href = result.stl;
+
+          $("result").hidden = false;
+
+          showModel(result.glb);
+
+          setMsg("Done");
+        } catch (e) {
+          console.error(e);
+
+          setMsg("Error: " + e.message, true);
+        } finally {
+          $("loading").hidden = true;
+
+          $("go").disabled = false;
+        }
+      };
+
+      // ======================================================
+      // SERVER STATUS
+      // ======================================================
+
+      fetch("/api/status", {
+        cache: "no-store",
+      })
+        .then((r) => r.json())
+
+        .then((s) => {
+          if (s.weights) {
+            $("status").innerHTML = `Ready on <b>${
+              s.device === "cuda" ? "GPU" : "CPU"
+            }</b>`;
+          } else {
+            $("status").textContent = "Missing weights";
+          }
+        })
+
+        .catch(() => {
+          $("status").textContent = "Server offline";
+        });
+    </script>
+  </body>
+</html>

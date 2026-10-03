@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+# Downloaded by download_models.py (large, not part of the repo)
+weights/
+TripoSR/
+# Generated models
+outputs/*
+!outputs/.gitkeep
+venv*/
+test314/
